@@ -1,0 +1,13 @@
+name,type,mode,description
+order_id,STRING,REQUIRED,Unique order identifier (UUID)
+customer_id,STRING,REQUIRED,Reference to the customer who placed the order
+status,STRING,NULLABLE,Order status: pending | confirmed | shipped | delivered | cancelled
+total_amount,NUMERIC,NULLABLE,Total order value including taxes and shipping
+currency,STRING,NULLABLE,ISO 4217 currency code (e.g. USD GBP INR)
+item_count,INTEGER,NULLABLE,Number of line items in the order
+created_at,TIMESTAMP,REQUIRED,UTC timestamp when the order was created
+updated_at,TIMESTAMP,NULLABLE,UTC timestamp of the last status update
+shipped_at,TIMESTAMP,NULLABLE,UTC timestamp when the order was shipped
+delivery_address,STRING,NULLABLE,Full delivery address as a single string
+is_gift,BOOLEAN,NULLABLE,True if the order is marked as a gift
+notes,STRING,NULLABLE,Optional customer or ops notes

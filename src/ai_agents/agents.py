@@ -1,11 +1,10 @@
-from __future__ import annotations
+# Backward-compatibility shim.
+# The Agent dataclass and agent constants now live in:
+#   base.py          → Agent, LLMClient
+#   agents/core.py   → DEFAULT_PLANNER, DEFAULT_RESEARCHER, DEFAULT_WRITER
+#   agents/bq_terraform.py → BQ_TERRAFORM_AGENT, SCHEMA_EXTRACTOR_AGENT
 
-from dataclasses import dataclass
+from .base import Agent
+from .agents.core import DEFAULT_PLANNER, DEFAULT_RESEARCHER, DEFAULT_WRITER
 
-
-@dataclass(frozen=True)
-class Agent:
-    name: str
-    role: str
-    system_prompt: str
-
+__all__ = ["Agent", "DEFAULT_PLANNER", "DEFAULT_RESEARCHER", "DEFAULT_WRITER"]

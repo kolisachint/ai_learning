@@ -1,13 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
 
-from .agents import Agent
-
-
-class LLMClient(Protocol):
-    def ask(self, prompt: str, system_prompt: str, max_tokens: int = 1000) -> str: ...
+from .base import Agent, LLMClient
+from .agents.core import DEFAULT_PLANNER, DEFAULT_RESEARCHER, DEFAULT_WRITER
 
 
 @dataclass
@@ -15,34 +11,6 @@ class AgentRunResult:
     planner_output: str
     researcher_output: str
     writer_output: str
-
-
-DEFAULT_PLANNER = Agent(
-    name="planner",
-    role="Breaks down goals into clear actionable steps.",
-    system_prompt=(
-        "You are a planning agent. Produce a compact numbered execution plan "
-        "with assumptions and risks."
-    ),
-)
-
-DEFAULT_RESEARCHER = Agent(
-    name="researcher",
-    role="Collects and structures technical details from provided context.",
-    system_prompt=(
-        "You are a research agent. Expand the plan into key technical details, "
-        "alternatives, and implementation notes."
-    ),
-)
-
-DEFAULT_WRITER = Agent(
-    name="writer",
-    role="Produces final response or deliverable.",
-    system_prompt=(
-        "You are a delivery agent. Produce a polished final answer using prior "
-        "agent outputs. Keep it practical."
-    ),
-)
 
 
 class AgentOrchestrator:

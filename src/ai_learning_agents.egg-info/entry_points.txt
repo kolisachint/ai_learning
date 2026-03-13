@@ -1,0 +1,3 @@
+[console_scripts]
+run-agents = ai_agents.scripts.run_agents:main
+run-bq-terraform = ai_agents.scripts.run_bq_terraform:main
