@@ -18,12 +18,12 @@ variable "dataset_id" {
 variable "table_id" {
   description = "BigQuery table ID"
   type        = string
-  default     = "orders"
+  default     = "customers"
 }
 
 # ── BigQuery Table ────────────────────────────────────────────────────────────
 
-resource "google_bigquery_table" "orders" {
+resource "google_bigquery_table" "customers" {
   project    = var.project_id
   dataset_id = var.dataset_id
   table_id   = var.table_id
@@ -32,46 +32,46 @@ resource "google_bigquery_table" "orders" {
 
   schema = jsonencode([
     {
-      name        = "order_id"
-      type        = "STRING"
-      mode        = "REQUIRED"
-      description = "Unique order identifier (UUID)"
-    },
-    {
       name        = "customer_id"
       type        = "STRING"
       mode        = "REQUIRED"
-      description = "FK to customers table"
+      description = "Unique customer identifier (UUID)"
     },
     {
-      name        = "status"
+      name        = "email"
+      type        = "STRING"
+      mode        = "REQUIRED"
+      description = "Customer email address (unique)"
+    },
+    {
+      name        = "full_name"
       type        = "STRING"
       mode        = "NULLABLE"
-      description = "pending | confirmed | shipped | delivered | cancelled"
+      description = "Customer full name"
     },
     {
-      name        = "total_amount"
-      type        = "NUMERIC"
-      mode        = "NULLABLE"
-      description = "Total order value including tax"
-    },
-    {
-      name        = "currency"
+      name        = "country_code"
       type        = "STRING"
       mode        = "NULLABLE"
-      description = "ISO 4217 currency code"
+      description = "ISO 3166-1 alpha-2 country code"
+    },
+    {
+      name        = "tier"
+      type        = "STRING"
+      mode        = "NULLABLE"
+      description = "Customer tier: standard | silver | gold | platinum"
     },
     {
       name        = "created_at"
       type        = "TIMESTAMP"
       mode        = "REQUIRED"
-      description = "UTC timestamp when order was placed"
+      description = "Account creation timestamp (UTC)"
     },
     {
-      name        = "updated_at"
-      type        = "TIMESTAMP"
+      name        = "is_active"
+      type        = "BOOLEAN"
       mode        = "NULLABLE"
-      description = "UTC timestamp of the last status change"
+      description = "Whether the account is currently active"
     }
   ])
 

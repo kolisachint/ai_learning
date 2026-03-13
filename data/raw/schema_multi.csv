@@ -1,0 +1,21 @@
+table_name,name,type,mode,description
+orders,order_id,STRING,REQUIRED,Unique order identifier (UUID)
+orders,customer_id,STRING,REQUIRED,FK to customers table
+orders,status,STRING,NULLABLE,pending | confirmed | shipped | delivered | cancelled
+orders,total_amount,NUMERIC,NULLABLE,Total order value including tax
+orders,currency,STRING,NULLABLE,ISO 4217 currency code
+orders,created_at,TIMESTAMP,REQUIRED,UTC timestamp when order was placed
+orders,updated_at,TIMESTAMP,NULLABLE,UTC timestamp of the last status change
+order_items,item_id,STRING,REQUIRED,Unique line-item identifier (UUID)
+order_items,order_id,STRING,REQUIRED,FK to orders table
+order_items,product_id,STRING,REQUIRED,FK to products table
+order_items,quantity,INTEGER,REQUIRED,Number of units ordered
+order_items,unit_price,NUMERIC,REQUIRED,Price per unit at time of order
+order_items,discount_pct,FLOAT,NULLABLE,Discount percentage applied (0-100)
+customers,customer_id,STRING,REQUIRED,Unique customer identifier (UUID)
+customers,email,STRING,REQUIRED,Customer email address (unique)
+customers,full_name,STRING,NULLABLE,Customer full name
+customers,country_code,STRING,NULLABLE,ISO 3166-1 alpha-2 country code
+customers,tier,STRING,NULLABLE,Customer tier: standard | silver | gold | platinum
+customers,created_at,TIMESTAMP,REQUIRED,Account creation timestamp (UTC)
+customers,is_active,BOOLEAN,NULLABLE,Whether the account is currently active

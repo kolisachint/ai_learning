@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
 
 
 @dataclass
@@ -34,14 +33,36 @@ class SchemaField:
 
 
 @dataclass
+class TableSchema:
+    """A named table with its schema fields.
+
+    Returned by file_reader for both single-table and multi-table inputs.
+    """
+
+    name: str
+    fields: list[SchemaField]
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "TableSchema":
+        """Parse from a multi-table JSON element: {table/name, fields/schema}."""
+        name = d.get("table") or d.get("name") or ""
+        raw_fields = d.get("fields") or d.get("schema") or []
+        return cls(
+            name=name,
+            fields=[SchemaField.from_dict(f) for f in raw_fields],
+        )
+
+
+@dataclass
 class BQTerraformState:
-    """Mutable state that flows through the BQ Terraform workflow.
+    """Mutable state for one table flowing through the BQ Terraform workflow.
+
+    The workflow returns one BQTerraformState per table found in the input file.
 
     Stages:
-      1. raw_input populated by FileReader
-      2. schema_fields populated by parser or SchemaExtractorAgent (PDF path)
-      3. terraform_hcl populated by BQTerraformAgent
-      4. output_path set after writing to disk
+      1. schema_fields populated by file_reader (CSV/JSON) or SchemaExtractorAgent (PDF)
+      2. terraform_hcl populated by HCL builder
+      3. output_path set after writing to disk
     """
 
     # --- inputs ---
@@ -51,18 +72,12 @@ class BQTerraformState:
     project_id: str
 
     # --- intermediate ---
-    # list[dict] for structured input (CSV/JSON), str for PDF raw text
-    raw_input: list[dict] | str = field(default_factory=list)
     schema_fields: list[SchemaField] = field(default_factory=list)
 
     # --- outputs ---
     terraform_hcl: str = ""
     output_path: str = ""
     error: str = ""
-
-    @property
-    def is_pdf_input(self) -> bool:
-        return isinstance(self.raw_input, str)
 
     @property
     def has_schema(self) -> bool:

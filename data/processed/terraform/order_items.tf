@@ -18,12 +18,12 @@ variable "dataset_id" {
 variable "table_id" {
   description = "BigQuery table ID"
   type        = string
-  default     = "orders"
+  default     = "order_items"
 }
 
 # ── BigQuery Table ────────────────────────────────────────────────────────────
 
-resource "google_bigquery_table" "orders" {
+resource "google_bigquery_table" "order_items" {
   project    = var.project_id
   dataset_id = var.dataset_id
   table_id   = var.table_id
@@ -32,46 +32,40 @@ resource "google_bigquery_table" "orders" {
 
   schema = jsonencode([
     {
+      name        = "item_id"
+      type        = "STRING"
+      mode        = "REQUIRED"
+      description = "Unique line-item identifier (UUID)"
+    },
+    {
       name        = "order_id"
       type        = "STRING"
       mode        = "REQUIRED"
-      description = "Unique order identifier (UUID)"
+      description = "FK to orders table"
     },
     {
-      name        = "customer_id"
+      name        = "product_id"
       type        = "STRING"
       mode        = "REQUIRED"
-      description = "FK to customers table"
+      description = "FK to products table"
     },
     {
-      name        = "status"
-      type        = "STRING"
-      mode        = "NULLABLE"
-      description = "pending | confirmed | shipped | delivered | cancelled"
+      name        = "quantity"
+      type        = "INTEGER"
+      mode        = "REQUIRED"
+      description = "Number of units ordered"
     },
     {
-      name        = "total_amount"
+      name        = "unit_price"
       type        = "NUMERIC"
-      mode        = "NULLABLE"
-      description = "Total order value including tax"
-    },
-    {
-      name        = "currency"
-      type        = "STRING"
-      mode        = "NULLABLE"
-      description = "ISO 4217 currency code"
-    },
-    {
-      name        = "created_at"
-      type        = "TIMESTAMP"
       mode        = "REQUIRED"
-      description = "UTC timestamp when order was placed"
+      description = "Price per unit at time of order"
     },
     {
-      name        = "updated_at"
-      type        = "TIMESTAMP"
+      name        = "discount_pct"
+      type        = "FLOAT"
       mode        = "NULLABLE"
-      description = "UTC timestamp of the last status change"
+      description = "Discount percentage applied (0-100)"
     }
   ])
 

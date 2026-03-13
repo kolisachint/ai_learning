@@ -3,32 +3,36 @@
 from __future__ import annotations
 
 
-# ------------------------------------------------------------------
-# Schema extraction (PDF → structured JSON array)
-# ------------------------------------------------------------------
+# ──────────────────────────────────────────────────────────────────────────────
+# Schema extraction  (PDF text → structured JSON)
+# ──────────────────────────────────────────────────────────────────────────────
 
 SCHEMA_EXTRACTION_SYSTEM = (
     "You are a data schema analyst. "
-    "Given raw text that describes a BigQuery table schema, extract all fields "
-    "and return them as a JSON array. Each element must have keys: "
-    "name, type, mode, description. "
+    "Given raw text that describes one or more BigQuery table schemas, extract "
+    "every table and return them as a JSON array. "
+    "Each element must have the keys: "
+    "  table       (string — table name), "
+    "  fields      (array of field objects with keys: name, type, mode, description). "
     "Valid BQ types: STRING, INTEGER, FLOAT, BOOLEAN, RECORD, TIMESTAMP, DATE, "
     "TIME, DATETIME, NUMERIC, BIGNUMERIC, BYTES, JSON, GEOGRAPHY, INTERVAL. "
     "Valid modes: NULLABLE, REQUIRED, REPEATED. "
+    "If only one table is present, still return a single-element array. "
     "Output ONLY the JSON array — no markdown fences, no explanation."
 )
 
 
 def schema_extraction_prompt(raw_text: str) -> str:
     return (
-        f"Extract the BigQuery schema fields from the following text and return "
-        f"a JSON array:\n\n{raw_text}"
+        "Extract all BigQuery table schemas from the following text and return "
+        "a JSON array of {table, fields} objects:\n\n"
+        f"{raw_text}"
     )
 
 
-# ------------------------------------------------------------------
-# HCL generation (schema fields → Terraform resource)
-# ------------------------------------------------------------------
+# ──────────────────────────────────────────────────────────────────────────────
+# HCL generation  (schema fields → Terraform resource)
+# ──────────────────────────────────────────────────────────────────────────────
 
 BQ_TERRAFORM_SYSTEM = (
     "You are a Terraform and BigQuery expert. "

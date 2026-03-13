@@ -1,0 +1,41 @@
+[
+  {
+    "table": "products",
+    "fields": [
+      {"name": "product_id",   "type": "STRING",    "mode": "REQUIRED", "description": "Unique product identifier (UUID)"},
+      {"name": "sku",          "type": "STRING",    "mode": "REQUIRED", "description": "Stock-keeping unit code"},
+      {"name": "name",         "type": "STRING",    "mode": "REQUIRED", "description": "Product display name"},
+      {"name": "category",     "type": "STRING",    "mode": "NULLABLE", "description": "Top-level product category"},
+      {"name": "sub_category", "type": "STRING",    "mode": "NULLABLE", "description": "Product sub-category"},
+      {"name": "price_usd",    "type": "NUMERIC",   "mode": "REQUIRED", "description": "Current list price in USD"},
+      {"name": "stock_qty",    "type": "INTEGER",   "mode": "NULLABLE", "description": "Units available in warehouse"},
+      {"name": "is_active",    "type": "BOOLEAN",   "mode": "NULLABLE", "description": "Whether the product is listed"},
+      {"name": "created_at",   "type": "TIMESTAMP", "mode": "REQUIRED", "description": "Product listing creation timestamp (UTC)"},
+      {"name": "metadata",     "type": "JSON",      "mode": "NULLABLE", "description": "Arbitrary product attributes"}
+    ]
+  },
+  {
+    "table": "inventory_snapshots",
+    "fields": [
+      {"name": "snapshot_id",  "type": "STRING",    "mode": "REQUIRED", "description": "Unique snapshot record ID"},
+      {"name": "product_id",   "type": "STRING",    "mode": "REQUIRED", "description": "FK to products table"},
+      {"name": "warehouse_id", "type": "STRING",    "mode": "REQUIRED", "description": "Warehouse location identifier"},
+      {"name": "qty_on_hand",  "type": "INTEGER",   "mode": "REQUIRED", "description": "Physical units on hand"},
+      {"name": "qty_reserved", "type": "INTEGER",   "mode": "NULLABLE", "description": "Units reserved for open orders"},
+      {"name": "reorder_point","type": "INTEGER",   "mode": "NULLABLE", "description": "Qty threshold that triggers reorder"},
+      {"name": "snapped_at",   "type": "TIMESTAMP", "mode": "REQUIRED", "description": "UTC timestamp of this snapshot"}
+    ]
+  },
+  {
+    "table": "suppliers",
+    "fields": [
+      {"name": "supplier_id",  "type": "STRING",    "mode": "REQUIRED", "description": "Unique supplier identifier"},
+      {"name": "name",         "type": "STRING",    "mode": "REQUIRED", "description": "Supplier company name"},
+      {"name": "country_code", "type": "STRING",    "mode": "NULLABLE", "description": "ISO 3166-1 alpha-2 country"},
+      {"name": "lead_days",    "type": "INTEGER",   "mode": "NULLABLE", "description": "Typical lead time in days"},
+      {"name": "rating",       "type": "FLOAT",     "mode": "NULLABLE", "description": "Internal supplier rating (0-5)"},
+      {"name": "is_preferred", "type": "BOOLEAN",   "mode": "NULLABLE", "description": "Whether this is a preferred supplier"},
+      {"name": "created_at",   "type": "TIMESTAMP", "mode": "REQUIRED", "description": "Supplier record creation timestamp"}
+    ]
+  }
+]
