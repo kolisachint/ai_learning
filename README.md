@@ -2,7 +2,6 @@
 
 An agentic AI framework for data engineering automation and design ops. Ships with an offline **BigQuery Terraform Agent** that converts table schema files (CSV, JSON, PDF) into production-ready Terraform HCL — no cloud API key required.
 
-<<<<<<< HEAD
     
 # ai_learning
 
@@ -39,7 +38,6 @@ ai_learning/
   scripts/
   .gitignore
 ```
-=======
 ---
 
 ## Features
@@ -94,8 +92,9 @@ ls data/processed/terraform/
 Put any PDF that contains schema documentation in `data/raw/`. The agent uses Ollama to extract field names, types, modes, and descriptions automatically.
 
 ```bash
-python scripts/run_bq_terraform.py data/raw/schema_multi.pdf \
-    --dataset analytics --project my-gcp-project
+python3 scripts/run_bq_terraform.py data/raw/schema_multi.pdf \
+    --dataset analytics --project my-gcp-project \
+    --timeout 1200 --num-ctx 2048
 ```
 
 Sample output:
@@ -309,4 +308,3 @@ All tests use `FakeLLM` — no Ollama or cloud credentials needed.
 ## Adding a New Agent
 
 See [AGENTS.md](AGENTS.md) for the full registry, naming conventions, and step-by-step instructions for adding agents, LLM backends, and workflows.
->>>>>>> 200d84f (Add multi-table BQ Terraform agent with full README)
