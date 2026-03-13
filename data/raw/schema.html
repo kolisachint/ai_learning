@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>BigQuery Schema: payments</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; color: #222; }
+    h1   { color: #1a56db; }
+    table { border-collapse: collapse; width: 100%; margin-top: 16px; }
+    th   { background: #1a56db; color: #fff; padding: 8px 12px; text-align: left; }
+    td   { padding: 7px 12px; border-bottom: 1px solid #ddd; }
+    tr:nth-child(even) td { background: #f4f7ff; }
+  </style>
+</head>
+<body>
+
+<h1>BigQuery Schema: payments</h1>
+<p>This table records every payment transaction processed through the platform.</p>
+
+<table id="payments">
+  <thead>
+    <tr>
+      <th>name</th>
+      <th>type</th>
+      <th>mode</th>
+      <th>description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>payment_id</td>   <td>STRING</td>    <td>REQUIRED</td> <td>Unique payment identifier (UUID v4)</td></tr>
+    <tr><td>order_id</td>     <td>STRING</td>    <td>REQUIRED</td> <td>FK to orders table</td></tr>
+    <tr><td>customer_id</td>  <td>STRING</td>    <td>REQUIRED</td> <td>FK to customers table</td></tr>
+    <tr><td>method</td>       <td>STRING</td>    <td>NULLABLE</td> <td>Payment method: card | bank_transfer | wallet | crypto</td></tr>
+    <tr><td>provider</td>     <td>STRING</td>    <td>NULLABLE</td> <td>Payment provider: stripe | paypal | adyen | braintree</td></tr>
+    <tr><td>amount</td>       <td>NUMERIC</td>   <td>REQUIRED</td> <td>Payment amount before fees</td></tr>
+    <tr><td>fee</td>          <td>NUMERIC</td>   <td>NULLABLE</td> <td>Transaction fee charged by the provider</td></tr>
+    <tr><td>currency</td>     <td>STRING</td>    <td>NULLABLE</td> <td>ISO 4217 currency code</td></tr>
+    <tr><td>status</td>       <td>STRING</td>    <td>NULLABLE</td> <td>pending | authorised | captured | failed | refunded</td></tr>
+    <tr><td>is_refund</td>    <td>BOOLEAN</td>   <td>NULLABLE</td> <td>True if this record is a refund</td></tr>
+    <tr><td>reference_id</td> <td>STRING</td>    <td>NULLABLE</td> <td>Provider transaction reference</td></tr>
+    <tr><td>metadata</td>     <td>JSON</td>      <td>NULLABLE</td> <td>Arbitrary payment metadata from provider</td></tr>
+    <tr><td>initiated_at</td> <td>TIMESTAMP</td> <td>REQUIRED</td> <td>UTC timestamp when payment was initiated</td></tr>
+    <tr><td>settled_at</td>   <td>TIMESTAMP</td> <td>NULLABLE</td> <td>UTC timestamp when funds were settled</td></tr>
+  </tbody>
+</table>
+
+</body>
+</html>

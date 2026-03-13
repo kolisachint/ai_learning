@@ -14,6 +14,8 @@ dependencies = [
   "requests>=2.31.0",
   # PDF schema extraction
   "pdfplumber>=0.10.0",
+  # HTML schema extraction
+  "beautifulsoup4>=4.12.0",
   # Environment config
   "python-dotenv>=1.0.1",
 ]

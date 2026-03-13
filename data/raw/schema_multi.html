@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Data Warehouse Schema — Marketing Domain</title>
+  <style>
+    body  { font-family: Arial, sans-serif; margin: 40px; color: #222; }
+    h1    { color: #1a56db; border-bottom: 2px solid #1a56db; padding-bottom: 8px; }
+    h2    { color: #374151; margin-top: 40px; }
+    p     { color: #555; }
+    table { border-collapse: collapse; width: 100%; margin-top: 12px; margin-bottom: 32px; }
+    caption { font-weight: bold; font-size: 1.05em; color: #1a56db; text-align: left;
+              padding: 6px 0; }
+    th    { background: #1e3a8a; color: #fff; padding: 8px 12px; text-align: left; }
+    td    { padding: 7px 12px; border-bottom: 1px solid #e5e7eb; }
+    tr:nth-child(even) td { background: #f0f4ff; }
+    .tag  { display: inline-block; background: #dbeafe; color: #1e3a8a;
+            border-radius: 4px; padding: 1px 6px; font-size: 0.8em; }
+  </style>
+</head>
+<body>
+
+<h1>Data Warehouse Schema — Marketing Domain</h1>
+<p>This document describes the BigQuery table schemas for the marketing analytics domain.
+   Three tables are defined: campaigns, ad_impressions, and campaign_conversions.</p>
+
+<!-- ── Table 1: resolved from <caption> ── -->
+<h2>Campaign Master Data</h2>
+<p>One row per marketing campaign. Tracks campaign metadata and budget.</p>
+<table>
+  <caption>campaigns</caption>
+  <thead>
+    <tr>
+      <th>name</th>
+      <th>type</th>
+      <th>mode</th>
+      <th>description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>campaign_id</td>   <td>STRING</td>    <td>REQUIRED</td> <td>Unique campaign identifier (UUID)</td></tr>
+    <tr><td>name</td>          <td>STRING</td>    <td>REQUIRED</td> <td>Campaign display name</td></tr>
+    <tr><td>channel</td>       <td>STRING</td>    <td>NULLABLE</td> <td>Channel: search | social | display | email | affiliate</td></tr>
+    <tr><td>objective</td>     <td>STRING</td>    <td>NULLABLE</td> <td>awareness | consideration | conversion | retention</td></tr>
+    <tr><td>budget_usd</td>    <td>NUMERIC</td>   <td>NULLABLE</td> <td>Total campaign budget in USD</td></tr>
+    <tr><td>spent_usd</td>     <td>NUMERIC</td>   <td>NULLABLE</td> <td>Amount spent to date in USD</td></tr>
+    <tr><td>is_active</td>     <td>BOOLEAN</td>   <td>NULLABLE</td> <td>Whether the campaign is currently running</td></tr>
+    <tr><td>target_audience</td><td>JSON</td>     <td>NULLABLE</td> <td>Audience targeting criteria as JSON</td></tr>
+    <tr><td>start_date</td>    <td>DATE</td>      <td>REQUIRED</td> <td>Campaign start date (UTC)</td></tr>
+    <tr><td>end_date</td>      <td>DATE</td>      <td>NULLABLE</td> <td>Campaign end date; null if ongoing</td></tr>
+    <tr><td>created_at</td>    <td>TIMESTAMP</td> <td>REQUIRED</td> <td>Record creation timestamp (UTC)</td></tr>
+  </tbody>
+</table>
+
+<!-- ── Table 2: resolved from id attribute ── -->
+<h2>Ad Impression Log</h2>
+<p>One row per ad impression served to a user. High-volume table — partitioned by served_at.</p>
+<table id="ad_impressions">
+  <thead>
+    <tr>
+      <th>name</th>
+      <th>type</th>
+      <th>mode</th>
+      <th>description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>impression_id</td> <td>STRING</td>    <td>REQUIRED</td> <td>Unique impression identifier</td></tr>
+    <tr><td>campaign_id</td>   <td>STRING</td>    <td>REQUIRED</td> <td>FK to campaigns table</td></tr>
+    <tr><td>ad_id</td>         <td>STRING</td>    <td>REQUIRED</td> <td>Creative / ad unit identifier</td></tr>
+    <tr><td>user_id</td>       <td>STRING</td>    <td>NULLABLE</td> <td>Authenticated user; null if anonymous</td></tr>
+    <tr><td>device_type</td>   <td>STRING</td>    <td>NULLABLE</td> <td>desktop | mobile | tablet | ctv</td></tr>
+    <tr><td>placement</td>     <td>STRING</td>    <td>NULLABLE</td> <td>Ad placement position on the page</td></tr>
+    <tr><td>was_clicked</td>   <td>BOOLEAN</td>   <td>NULLABLE</td> <td>True if the impression resulted in a click</td></tr>
+    <tr><td>cost_usd</td>      <td>NUMERIC</td>   <td>NULLABLE</td> <td>Cost of this impression in USD (CPM/CPC)</td></tr>
+    <tr><td>served_at</td>     <td>TIMESTAMP</td> <td>REQUIRED</td> <td>UTC timestamp when the ad was served</td></tr>
+  </tbody>
+</table>
+
+<!-- ── Table 3: resolved from preceding <h2> ── -->
+<h2>Table: campaign_conversions</h2>
+<p>Attribution records linking a conversion event back to a campaign impression.</p>
+<table>
+  <thead>
+    <tr>
+      <th>name</th>
+      <th>type</th>
+      <th>mode</th>
+      <th>description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>conversion_id</td>    <td>STRING</td>    <td>REQUIRED</td> <td>Unique conversion record ID</td></tr>
+    <tr><td>campaign_id</td>      <td>STRING</td>    <td>REQUIRED</td> <td>FK to campaigns table</td></tr>
+    <tr><td>impression_id</td>    <td>STRING</td>    <td>NULLABLE</td> <td>FK to ad_impressions; null for view-through</td></tr>
+    <tr><td>user_id</td>          <td>STRING</td>    <td>NULLABLE</td> <td>FK to users table</td></tr>
+    <tr><td>conversion_type</td>  <td>STRING</td>    <td>REQUIRED</td> <td>signup | purchase | lead | app_install</td></tr>
+    <tr><td>revenue_usd</td>      <td>NUMERIC</td>   <td>NULLABLE</td> <td>Revenue value of the conversion in USD</td></tr>
+    <tr><td>attribution_model</td><td>STRING</td>    <td>NULLABLE</td> <td>last_click | first_click | linear | data_driven</td></tr>
+    <tr><td>converted_at</td>     <td>TIMESTAMP</td> <td>REQUIRED</td> <td>UTC timestamp when the conversion occurred</td></tr>
+  </tbody>
+</table>
+
+</body>
+</html>

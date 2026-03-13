@@ -1,50 +1,14 @@
 # ai-learning-agents
 
-An agentic AI framework for data engineering automation and design ops. Ships with an offline **BigQuery Terraform Agent** that converts table schema files (CSV, JSON, PDF) into production-ready Terraform HCL — no cloud API key required.
+An agentic AI framework for data engineering automation and design ops. Ships with an offline **BigQuery Terraform Agent** that converts table schema files (CSV, JSON, HTML, PDF) into production-ready Terraform HCL — no cloud API key required.
 
-    
-# ai_learning
-
-This repository is currently a **starter skeleton** and does not yet contain application code.
-
-## Current structure
-
-- `.git/` — Git metadata and history.
-- `.gitkeep` — Placeholder file to keep the repository non-empty.
-
-## What a newcomer should know
-
-1. There is no implemented source tree yet (no `src/`, `app/`, tests, or build config files).
-2. The repository is ready to be initialized into any stack (Python, JS/TS, Go, Rust, etc.).
-3. The first meaningful step is to define a project goal and pick a concrete runtime/toolchain.
-
-## Suggested next learning/build steps
-
-1. Define the project objective in a short architecture/design note.
-2. Add a language/tooling scaffold (for example, `pyproject.toml` or `package.json`).
-3. Create a minimal runnable app entry point and a basic test.
-4. Add developer automation (`Makefile` or scripts for lint/test/run).
-5. Set up CI to run tests and lint on each commit.
-
-## Example initial layout to aim for
-
-```
-ai_learning/
-  README.md
-  docs/
-    architecture.md
-  src/
-  tests/
-  scripts/
-  .gitignore
-```
 ---
 
 ## Features
 
 - **BQ Terraform Agent** — reads one or many table schemas from a single file and generates `google_bigquery_table` Terraform resources
-- **Offline-first** — uses [Ollama](https://ollama.com) for all LLM inference; no internet or API key needed for CSV/JSON input
-- **Multi-format input** — CSV, JSON, and PDF schema files; single-table and multi-table in the same file
+- **Offline-first** — uses [Ollama](https://ollama.com) for all LLM inference; no internet or API key needed for CSV/JSON/HTML input
+- **Multi-format input** — CSV, JSON, HTML, PDF; single-table and multi-table in the same file
 - **Planner → Researcher → Writer** pipeline for general-purpose agentic tasks (Vertex AI / Gemini)
 - Cleanly layered: agents / integrations / tools / prompts / state / workflows
 
@@ -58,7 +22,7 @@ ai_learning/
 pip install -e ".[dev]"
 ```
 
-### 2. Set up Ollama (required for PDF; optional for CSV/JSON)
+### 2. Set up Ollama (required for PDF; optional for CSV/JSON/HTML)
 
 ```bash
 # Install: https://ollama.com
@@ -87,14 +51,53 @@ ls data/processed/terraform/
 
 ## Input Formats
 
+### HTML — one or many tables (no LLM needed for structured tables)
+
+The cleanest format for documentation-driven workflows. Any HTML file with
+`<table>` elements whose headers include `name` and `type` columns is parsed
+**deterministically** — no Ollama required.
+
+Table names are resolved automatically from (in priority order):
+1. `<caption>` element inside the table
+2. `id` or `data-table` attribute on `<table>`
+3. Nearest preceding `<h1>`–`<h5>` heading (strips "Table:" / "Schema:" prefix)
+4. `--table` argument (single-table files only)
+
+```bash
+# Multi-table HTML (3 tables, name resolved from caption/id/heading):
+python scripts/run_bq_terraform.py data/raw/schema_multi.html \
+    --dataset marketing --project my-gcp-project
+
+# Single-table HTML:
+python scripts/run_bq_terraform.py data/raw/schema.html \
+    --dataset finance --project my-gcp-project
+```
+
+Minimal example — table name from heading, field rows in `<tbody>`:
+
+```html
+<h2>orders</h2>
+<table>
+  <thead>
+    <tr><th>name</th><th>type</th><th>mode</th><th>description</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>order_id</td>  <td>STRING</td>    <td>REQUIRED</td><td>Unique order ID</td></tr>
+    <tr><td>amount</td>    <td>NUMERIC</td>   <td>NULLABLE</td><td>Order total</td></tr>
+    <tr><td>created_at</td><td>TIMESTAMP</td> <td>REQUIRED</td><td>Order timestamp</td></tr>
+  </tbody>
+</table>
+```
+
+HTML files with no recognisable schema tables fall back to text extraction and LLM-assisted parsing (same path as PDF).
+
 ### PDF — one or many tables (Ollama required for extraction)
 
 Put any PDF that contains schema documentation in `data/raw/`. The agent uses Ollama to extract field names, types, modes, and descriptions automatically.
 
 ```bash
-python3 scripts/run_bq_terraform.py data/raw/schema_multi.pdf \
-    --dataset analytics --project my-gcp-project \
-    --timeout 1200 --num-ctx 2048
+python scripts/run_bq_terraform.py data/raw/schema_multi.pdf \
+    --dataset analytics --project my-gcp-project
 ```
 
 Sample output:
@@ -165,13 +168,24 @@ python scripts/run_bq_terraform.py data/raw/schema.csv \
 
 ---
 
+## Format Summary
+
+| Format | Extension | LLM needed | Multi-table | Table name source |
+|---|---|---|---|---|
+| HTML | `.html` `.htm` | No (structured) / Yes (unstructured) | Yes | `<caption>`, `id`, heading, `--table` |
+| JSON | `.json` | No | Yes | Embedded in file |
+| CSV | `.csv` | No | Yes (via `table_name` col) | Column or `--table` |
+| PDF | `.pdf` | Yes (always) | Yes | Extracted by LLM |
+
+---
+
 ## CLI Reference
 
 ```
 python scripts/run_bq_terraform.py <input> --dataset <ID> --project <ID> [options]
 
 Positional:
-  input               Path to .csv, .json, or .pdf schema file
+  input               Path to .csv, .json, .html, .htm, or .pdf schema file
 
 Required:
   --dataset ID        BigQuery dataset ID
@@ -253,7 +267,7 @@ src/ai_agents/
     ollama/client.py          # OllamaLLMClient  — offline, no API key
     vertex/client.py          # VertexLLMClient  — Gemini on GCP
   tools/
-    file_reader.py            # CSV / JSON / PDF → list[TableSchema]
+    file_reader.py            # CSV / JSON / HTML / PDF → list[TableSchema]
   prompts/
     bq_terraform.py           # system prompts + prompt builders
   state/
@@ -266,7 +280,7 @@ scripts/
   run_bq_terraform.py         # BQ schema → Terraform HCL CLI
 
 data/
-  raw/                        # Input schema files (CSV, JSON, PDF)
+  raw/                        # Input schema files (CSV, JSON, HTML, PDF)
   processed/terraform/        # Generated .tf files
 
 tests/

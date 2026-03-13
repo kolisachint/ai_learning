@@ -443,3 +443,179 @@ class TestWorkflowPdf:
             wf_module.read_schema_file = original
 
         assert {r.table_name for r in results} == {"sessions", "page_views", "conversions"}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# file_reader — HTML (structured schema tables)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestReadHtmlStructured:
+    def _html(self, tmp_path: Path, body: str, title: str = "Schema") -> Path:
+        f = tmp_path / "schema.html"
+        f.write_text(f"<html><head><title>{title}</title></head><body>{body}</body></html>")
+        return f
+
+    def _table(self, rows: list[tuple], caption: str = "", table_id: str = "") -> str:
+        cap = f"<caption>{caption}</caption>" if caption else ""
+        id_attr = f' id="{table_id}"' if table_id else ""
+        header = "<tr><th>name</th><th>type</th><th>mode</th><th>description</th></tr>"
+        data = "".join(
+            f"<tr>{''.join(f'<td>{c}</td>' for c in row)}</tr>" for row in rows
+        )
+        return f"<table{id_attr}>{cap}<thead>{header}</thead><tbody>{data}</tbody></table>"
+
+    def test_single_table_from_caption(self, tmp_path: Path) -> None:
+        html = self._table([("user_id", "STRING", "REQUIRED", "PK")], caption="users")
+        result = read_schema_file(self._html(tmp_path, html))
+        assert isinstance(result, list)
+        assert result[0].name == "users"
+        assert result[0].fields[0].name == "user_id"
+
+    def test_single_table_from_id_attr(self, tmp_path: Path) -> None:
+        html = self._table([("col", "STRING", "NULLABLE", "")], table_id="orders")
+        result = read_schema_file(self._html(tmp_path, html))
+        assert result[0].name == "orders"
+
+    def test_table_name_from_preceding_heading(self, tmp_path: Path) -> None:
+        body = "<h2>payments</h2>" + self._table([("amount", "NUMERIC", "REQUIRED", "Total")])
+        result = read_schema_file(self._html(tmp_path, body))
+        assert result[0].name == "payments"
+
+    def test_table_prefix_stripped_from_heading(self, tmp_path: Path) -> None:
+        body = "<h3>Table: transactions</h3>" + self._table([("tx_id", "STRING", "REQUIRED", "")])
+        result = read_schema_file(self._html(tmp_path, body))
+        assert result[0].name == "transactions"
+
+    def test_table_name_from_argument_when_no_metadata(self, tmp_path: Path) -> None:
+        html = self._table([("id", "STRING", "REQUIRED", "")])
+        result = read_schema_file(self._html(tmp_path, html), table_name="events")
+        assert result[0].name == "events"
+
+    def test_auto_name_when_no_metadata_and_no_arg(self, tmp_path: Path) -> None:
+        html = self._table([("id", "STRING", "REQUIRED", "")])
+        result = read_schema_file(self._html(tmp_path, html))
+        assert result[0].name == "table_1"
+
+    def test_field_count_correct(self, tmp_path: Path) -> None:
+        rows = [("a", "STRING", "REQUIRED", ""), ("b", "INTEGER", "NULLABLE", ""), ("c", "BOOLEAN", "NULLABLE", "")]
+        html = self._table(rows, caption="t")
+        result = read_schema_file(self._html(tmp_path, html))
+        assert len(result[0].fields) == 3
+
+    def test_type_normalisation(self, tmp_path: Path) -> None:
+        html = self._table([("x", "INT64", "NULLABLE", "")], caption="t")
+        result = read_schema_file(self._html(tmp_path, html))
+        assert result[0].fields[0].type == "INTEGER"
+
+    def test_invalid_mode_defaults_to_nullable(self, tmp_path: Path) -> None:
+        html = self._table([("x", "STRING", "OOPS", "")], caption="t")
+        result = read_schema_file(self._html(tmp_path, html))
+        assert result[0].fields[0].mode == "NULLABLE"
+
+    def test_no_name_type_columns_falls_back_to_text(self, tmp_path: Path) -> None:
+        body = "<table><tr><td>foo</td><td>bar</td></tr></table><p>Some schema info here</p>"
+        result = read_schema_file(self._html(tmp_path, body))
+        assert isinstance(result, str)
+
+    def test_htm_extension_supported(self, tmp_path: Path) -> None:
+        f = tmp_path / "schema.htm"
+        html = self._table([("id", "STRING", "REQUIRED", "")], caption="t")
+        f.write_text(f"<html><body>{html}</body></html>")
+        result = read_schema_file(f)
+        assert isinstance(result, list)
+
+
+class TestReadHtmlMultiTable:
+    def _multi_html(self, tmp_path: Path) -> Path:
+        f = tmp_path / "multi.html"
+        f.write_text("""
+        <html><body>
+          <h2>campaigns</h2>
+          <table>
+            <thead><tr><th>name</th><th>type</th><th>mode</th><th>description</th></tr></thead>
+            <tbody>
+              <tr><td>campaign_id</td><td>STRING</td><td>REQUIRED</td><td>Unique ID</td></tr>
+              <tr><td>budget</td><td>NUMERIC</td><td>NULLABLE</td><td>Budget USD</td></tr>
+            </tbody>
+          </table>
+          <h2>Table: ad_impressions</h2>
+          <table>
+            <thead><tr><th>name</th><th>type</th><th>mode</th><th>description</th></tr></thead>
+            <tbody>
+              <tr><td>impression_id</td><td>STRING</td><td>REQUIRED</td><td>Unique impression ID</td></tr>
+              <tr><td>campaign_id</td><td>STRING</td><td>REQUIRED</td><td>FK to campaigns</td></tr>
+              <tr><td>cost_usd</td><td>NUMERIC</td><td>NULLABLE</td><td>Cost per impression</td></tr>
+            </tbody>
+          </table>
+          <table id="conversions">
+            <thead><tr><th>name</th><th>type</th><th>mode</th><th>description</th></tr></thead>
+            <tbody>
+              <tr><td>conversion_id</td><td>STRING</td><td>REQUIRED</td><td>Unique ID</td></tr>
+            </tbody>
+          </table>
+        </body></html>
+        """)
+        return f
+
+    def test_all_tables_parsed(self, tmp_path: Path) -> None:
+        result = read_schema_file(self._multi_html(tmp_path))
+        assert isinstance(result, list)
+        assert len(result) == 3
+
+    def test_table_names_resolved(self, tmp_path: Path) -> None:
+        result = read_schema_file(self._multi_html(tmp_path))
+        names = {t.name for t in result}
+        assert names == {"campaigns", "ad_impressions", "conversions"}
+
+    def test_field_counts(self, tmp_path: Path) -> None:
+        result = read_schema_file(self._multi_html(tmp_path))
+        counts = {t.name: len(t.fields) for t in result}
+        assert counts == {"campaigns": 2, "ad_impressions": 3, "conversions": 1}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Full workflow — HTML structured (no LLM)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestWorkflowHtml:
+    def test_structured_html_no_llm_calls(self, tmp_path: Path) -> None:
+        f = tmp_path / "schema.html"
+        f.write_text("""<html><body>
+          <h2>payments</h2>
+          <table>
+            <thead><tr><th>name</th><th>type</th><th>mode</th><th>description</th></tr></thead>
+            <tbody>
+              <tr><td>payment_id</td><td>STRING</td><td>REQUIRED</td><td>PK</td></tr>
+              <tr><td>amount</td><td>NUMERIC</td><td>NULLABLE</td><td>Amount</td></tr>
+            </tbody>
+          </table>
+        </body></html>""")
+        fake = FakeLLM()
+        results = run_bq_terraform_workflow(
+            input_path=f, dataset_id="finance", project_id="proj",
+            llm=fake, output_dir=tmp_path / "tf",
+        )
+        assert results[0].succeeded
+        assert results[0].table_name == "payments"
+        assert len(results[0].schema_fields) == 2
+        assert len(fake.calls) == 0  # no LLM for structured HTML
+
+    def test_multi_table_html_produces_multiple_tf_files(self, tmp_path: Path) -> None:
+        f = tmp_path / "multi.html"
+        f.write_text("""<html><body>
+          <table id="orders">
+            <thead><tr><th>name</th><th>type</th><th>mode</th><th>description</th></tr></thead>
+            <tbody><tr><td>order_id</td><td>STRING</td><td>REQUIRED</td><td>PK</td></tr></tbody>
+          </table>
+          <table id="customers">
+            <thead><tr><th>name</th><th>type</th><th>mode</th><th>description</th></tr></thead>
+            <tbody><tr><td>customer_id</td><td>STRING</td><td>REQUIRED</td><td>PK</td></tr></tbody>
+          </table>
+        </body></html>""")
+        out_dir = tmp_path / "tf"
+        run_bq_terraform_workflow(
+            input_path=f, dataset_id="sales", project_id="proj",
+            llm=FakeLLM(), output_dir=out_dir,
+        )
+        tf_files = {p.name for p in out_dir.iterdir() if p.suffix == ".tf"}
+        assert tf_files == {"orders.tf", "customers.tf"}

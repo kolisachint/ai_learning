@@ -95,37 +95,43 @@ resource "google_bigquery_table" "events" {
       name        = "region"
       type        = "STRING"
       mode        = "NULLABLE"
-      description = "State or region"
+      description = "State or region name"
     },
     {
       name        = "properties"
-      type        = "RECORD"
+      type        = "JSON"
       mode        = "NULLABLE"
-      description = "Additional properties"
+      description = "Arbitrary event properties as JSON"
     },
     {
-      name        = "properties"
-      type        = "REPEATED"
+      name        = "revenue_usd"
+      type        = "NUMERIC"
       mode        = "NULLABLE"
-      description = "Additional properties"
+      description = "Revenue associated with the event in USD"
     },
     {
-      name        = "properties"
-      type        = "MAP"
+      name        = "duration_ms"
+      type        = "INTEGER"
       mode        = "NULLABLE"
-      description = "Additional properties"
+      description = "Event duration in milliseconds"
     },
     {
-      name        = "timestamp"
+      name        = "is_conversion"
+      type        = "BOOLEAN"
+      mode        = "NULLABLE"
+      description = "True if this event counts as a conversion"
+    },
+    {
+      name        = "occurred_at"
       type        = "TIMESTAMP"
-      mode        = "NULLABLE"
-      description = "Event timestamp"
+      mode        = "REQUIRED"
+      description = "UTC timestamp when the event occurred"
     },
     {
-      name        = "timestamp_micros"
+      name        = "ingested_at"
       type        = "TIMESTAMP"
-      mode        = "NULLABLE"
-      description = "Event timestamp with microsecond precision"
+      mode        = "REQUIRED"
+      description = "UTC timestamp when the row was inserted"
     }
   ])
 
