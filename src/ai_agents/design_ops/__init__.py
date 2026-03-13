@@ -1,0 +1,1 @@
+"""Design automation domain logic."""
