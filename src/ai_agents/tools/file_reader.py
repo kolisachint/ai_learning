@@ -189,31 +189,67 @@ def _read_csv(path: Path, table_name: str | None) -> list[TableSchema]:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# HTML
+# HTML — column-name synonyms for flexible header matching
 # ──────────────────────────────────────────────────────────────────────────────
+
+# Canonical key → set of accepted header strings (lowercased, spaces OK)
+_HTML_COL_SYNONYMS: dict[str, set[str]] = {
+    "name": {
+        "name", "field", "field name", "fieldname", "column", "col",
+        "column name", "columnname", "attribute", "property",
+        "param", "parameter", "key", "field_name", "column_name",
+    },
+    "type": {
+        "type", "data type", "datatype", "data_type", "field type",
+        "fieldtype", "field_type", "column type", "columntype",
+        "column_type", "dtype", "bq type", "bq_type",
+        "bigquery type", "bigquery_type",
+    },
+    "mode": {
+        "mode", "nullable", "null", "nullability", "is nullable",
+        "is_nullable", "required", "is required", "is_required",
+        "constraint", "optional", "cardinality",
+    },
+    "description": {
+        "description", "desc", "comment", "remarks", "notes",
+        "detail", "details", "info", "information",
+        "meaning", "definition", "purpose", "summary",
+    },
+}
+
+# HTML tags that are pure noise and should be stripped before any parsing
+_HTML_NOISE_TAGS = {
+    "script", "style", "nav", "footer", "header", "head",
+    "noscript", "iframe", "aside", "form", "button",
+}
+
+# Tags that strongly suggest a layout / structural table rather than data
+_LAYOUT_ROLES = {"presentation", "none"}
+
 
 def _read_html(path: Path, table_name: str | None) -> ParsedInput:
     """Parse BQ schema from an HTML file.
 
     Strategy
     ────────
-    1. Find every ``<table>`` whose header row contains at least ``name`` and
-       ``type`` columns.  Parse those rows deterministically — no LLM needed.
-       Table name resolved from (priority order):
-         a. ``<caption>`` element inside the table
-         b. ``id`` or ``data-table`` attribute on ``<table>``
-         c. Nearest preceding ``<h1>``–``<h5>`` sibling (strips common
-            prefixes such as "Table:" or "Schema:")
-         d. ``table_name`` argument (single structured table only)
-         e. Auto-generated ``table_1``, ``table_2``, …
-
-    2. If no schema tables are found, extract all visible text and return it
-       as a ``str`` for LLM-assisted extraction (same path as PDF).
+    1. Strip all noise tags (scripts, styles, nav, …).
+    2. Find every ``<table>`` with at least 2 columns.  Skip layout tables
+       (role="presentation", single-column, <2 data rows).
+    3. Map each table's header row to canonical column names using a broad
+       synonym dictionary — handles "Field Name", "Column", "Data Type",
+       "Remarks", etc. without requiring exact strings.
+    4. If at least a ``name``-like and ``type``-like column are found,
+       parse that table deterministically — no LLM required.
+       Table name is resolved from ``<caption>`` → ``id``/``data-table``
+       attr → nearest preceding heading → ``--table`` arg → auto-index.
+    5. If no schema tables are found, convert the remaining HTML to a
+       compact structured text (headings + pipe-separated table rows) and
+       return that string for LLM-assisted extraction.
 
     Requires ``beautifulsoup4``: ``pip install beautifulsoup4``
     """
     try:
-        from bs4 import BeautifulSoup, Tag  # type: ignore[import]
+        from bs4 import BeautifulSoup  # type: ignore[import]
     except ImportError:
         raise ImportError(
             "beautifulsoup4 is required for HTML support. "
@@ -223,53 +259,63 @@ def _read_html(path: Path, table_name: str | None) -> ParsedInput:
     html = path.read_text(encoding="utf-8")
     soup = BeautifulSoup(html, "html.parser")
 
+    # Strip noise before any processing
+    for tag in soup.find_all(_HTML_NOISE_TAGS):
+        tag.decompose()
+
     schema_tables = _parse_html_schema_tables(soup, table_name)
     if schema_tables:
         return schema_tables
 
-    # No structured schema tables found — extract text for LLM
-    text = soup.get_text(separator="\n", strip=True)
+    # ── LLM fallback: convert to clean structured text ────────────────────────
+    # Send headings + table rows (pipe-separated) — far cleaner than get_text()
+    text = _html_to_structured_text(soup)
     if not text.strip():
         raise ValueError(f"No extractable content found in HTML file: {path}")
     return text
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Structured HTML table parsing
+# ──────────────────────────────────────────────────────────────────────────────
+
 def _parse_html_schema_tables(soup, override_name: str | None) -> list[TableSchema]:
-    """Find and deterministically parse HTML <table> elements with schema columns."""
-    _REQUIRED_HEADERS = {"name", "type"}
+    """Scan every <table> and parse those that look like BQ schema definitions."""
     results: list[TableSchema] = []
 
     for table_el in soup.find_all("table"):
-        # Locate the header row (first <tr> containing <th> or the first <tr>)
-        header_cells = table_el.find_all("th")
-        if not header_cells:
-            first_row = table_el.find("tr")
-            header_cells = first_row.find_all("td") if first_row else []
+        if _is_layout_table(table_el):
+            continue
 
-        headers = [c.get_text(strip=True).lower() for c in header_cells]
-        if not _REQUIRED_HEADERS.issubset(set(headers)):
-            continue  # not a schema table
-
-        # Parse data rows (skip the header row itself)
         all_rows = table_el.find_all("tr")
-        data_rows = all_rows[1:] if header_cells and all_rows else all_rows
+        if len(all_rows) < 2:
+            continue
 
+        # Find the header row: prefer a row with <th> elements, else first row
+        header_row_idx, col_map = _detect_schema_columns(all_rows)
+        if header_row_idx is None or "name" not in col_map or "type" not in col_map:
+            continue
+
+        # Parse data rows (everything after the header row)
         fields: list[SchemaField] = []
-        for row in data_rows:
+        for row in all_rows[header_row_idx + 1:]:
             cells = [td.get_text(strip=True) for td in row.find_all(["td", "th"])]
-            if not cells or len(cells) < 2:
+            if not cells or all(c == "" for c in cells):
                 continue
-            row_dict = {header: (cells[i] if i < len(cells) else "") for i, header in enumerate(headers)}
-            if row_dict.get("name"):
+
+            field_dict = {
+                canon: cells[idx] if idx < len(cells) else ""
+                for canon, idx in col_map.items()
+            }
+            if field_dict.get("name"):
                 try:
-                    fields.append(_normalise_field(row_dict))
+                    fields.append(_normalise_field(field_dict))
                 except ValueError:
-                    pass  # skip malformed rows
+                    pass  # skip rows missing required values
 
         if not fields:
             continue
 
-        # Resolve table name
         tname = (
             _html_caption(table_el)
             or _html_attr_name(table_el)
@@ -281,6 +327,54 @@ def _parse_html_schema_tables(soup, override_name: str | None) -> list[TableSche
 
     return results
 
+
+def _detect_schema_columns(rows) -> tuple[int | None, dict[str, int]]:
+    """Return (header_row_index, {canonical_name: col_index}) or (None, {})."""
+    # Check the first few rows for a header row
+    for i, row in enumerate(rows[:4]):
+        cells = row.find_all(["th", "td"])
+        if len(cells) < 2:
+            continue
+        col_map = _map_headers(cells)
+        if "name" in col_map and "type" in col_map:
+            return i, col_map
+    return None, {}
+
+
+def _map_headers(header_cells) -> dict[str, int]:
+    """Map each cell's text to a canonical column name using synonym sets."""
+    col_map: dict[str, int] = {}
+    for i, cell in enumerate(header_cells):
+        raw = cell.get_text(strip=True).lower()
+        # Normalise to space-separated for lookup
+        normalised = re.sub(r"[\s_\-]+", " ", raw).strip()
+        for canon, synonyms in _HTML_COL_SYNONYMS.items():
+            if canon not in col_map and (raw in synonyms or normalised in synonyms):
+                col_map[canon] = i
+                break
+    return col_map
+
+
+def _is_layout_table(table_el) -> bool:
+    """Return True for tables used as page layout rather than data containers."""
+    role = (table_el.get("role") or "").lower()
+    if role in _LAYOUT_ROLES:
+        return True
+    rows = table_el.find_all("tr")
+    if not rows:
+        return True
+    max_cols = max((len(r.find_all(["td", "th"])) for r in rows), default=0)
+    if max_cols < 2:
+        return True
+    # Tables with only one data row (header + 0 or 1 rows) are not schema tables
+    if len(rows) < 2:
+        return True
+    return False
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Table name helpers
+# ──────────────────────────────────────────────────────────────────────────────
 
 def _html_caption(table_el) -> str:
     caption = table_el.find("caption")
@@ -297,9 +391,11 @@ def _html_attr_name(table_el) -> str:
 
 def _html_heading_before(table_el) -> str:
     """Walk backwards through siblings to find the nearest heading element."""
-    _HEADING_TAGS = {"h1", "h2", "h3", "h4", "h5"}
-    _STRIP_PREFIXES = ("table:", "schema:", "table -", "schema -", "table—", "schema—")
-
+    _HEADING_TAGS = {"h1", "h2", "h3", "h4", "h5", "h6"}
+    _STRIP_PREFIXES = (
+        "table:", "schema:", "table -", "schema -",
+        "table—", "schema—", "entity:", "object:",
+    )
     for sibling in table_el.previous_siblings:
         tag = getattr(sibling, "name", None)
         if tag in _HEADING_TAGS:
@@ -313,10 +409,56 @@ def _html_heading_before(table_el) -> str:
 
 
 def _slug(text: str) -> str:
-    """Convert arbitrary text to a snake_case table name."""
+    """Convert arbitrary text to a snake_case identifier."""
     text = text.strip().lower()
     text = re.sub(r"[^a-z0-9]+", "_", text)
     return text.strip("_")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# LLM fallback: convert remaining HTML to structured text
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _html_to_structured_text(soup) -> str:
+    """Convert HTML to compact structured text for LLM extraction.
+
+    Produces headings and pipe-separated table rows — far cleaner than
+    raw ``get_text()`` output, giving the LLM recognisable structure.
+    """
+    _HEADING_TAGS = {"h1", "h2", "h3", "h4", "h5", "h6"}
+    parts: list[str] = []
+    visited_tables: set[int] = set()
+
+    body = soup.find("body") or soup
+    for element in body.descendants:
+        tag = getattr(element, "name", None)
+        if tag is None:
+            continue
+
+        if tag in _HEADING_TAGS:
+            text = element.get_text(strip=True)
+            if text:
+                parts.append(f"\n### {text}")
+
+        elif tag == "table" and id(element) not in visited_tables:
+            visited_tables.add(id(element))
+            table_text = _table_to_pipe_text(element)
+            if table_text:
+                parts.append(table_text)
+
+    raw = "\n".join(parts)
+    # Collapse excessive blank lines
+    return re.sub(r"\n{3,}", "\n\n", raw).strip()
+
+
+def _table_to_pipe_text(table_el) -> str:
+    """Render an HTML table as pipe-separated rows for LLM readability."""
+    lines: list[str] = []
+    for row in table_el.find_all("tr"):
+        cells = [c.get_text(strip=True) for c in row.find_all(["th", "td"])]
+        if any(cells):
+            lines.append(" | ".join(cells))
+    return "\n".join(lines)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

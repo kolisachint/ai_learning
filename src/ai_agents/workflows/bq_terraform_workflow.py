@@ -122,8 +122,15 @@ def run_bq_terraform_workflow(
 # PDF extraction
 # ──────────────────────────────────────────────────────────────────────────────
 
+_MAX_EXTRACTION_CHARS = 5000  # keeps the LLM prompt manageable on small models
+
+
 def _extract_tables_from_text(raw_text: str, llm: LLMClient) -> list[TableSchema]:
     """Use LLM to extract one or more BQ table schemas from unstructured text."""
+    # Truncate so the model isn't overwhelmed (deepseek-coder handles ~2k tokens well)
+    if len(raw_text) > _MAX_EXTRACTION_CHARS:
+        raw_text = raw_text[:_MAX_EXTRACTION_CHARS] + "\n... [truncated for LLM]"
+
     response = llm.ask(
         prompt=schema_extraction_prompt(raw_text),
         system_prompt=SCHEMA_EXTRACTION_SYSTEM,
@@ -140,7 +147,15 @@ def _extract_tables_from_text(raw_text: str, llm: LLMClient) -> list[TableSchema
         raw_tables = json.loads(cleaned)
     except json.JSONDecodeError as exc:
         raise ValueError(
-            f"Schema extractor returned invalid JSON.\nModel output:\n{response}\nError: {exc}"
+            f"LLM did not return valid JSON for schema extraction.\n"
+            f"\nModel said:\n  {response[:300]!r}\n"
+            f"\nThis usually means the input text had no recognisable schema information,\n"
+            f"or the model was confused by the content. Tips:\n"
+            f"  • For HTML: add a <table> with columns name, type, mode, description\n"
+            f"  • For PDF : ensure the schema is in a readable table or list format\n"
+            f"  • Try a larger model: --model llama3:8b or --model codellama:13b\n"
+            f"  • Increase context: --num-ctx 4096\n"
+            f"\nJSON error: {exc}"
         ) from exc
 
     if not isinstance(raw_tables, list):
